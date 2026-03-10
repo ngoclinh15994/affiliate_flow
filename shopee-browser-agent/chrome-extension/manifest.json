@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "ChoTot Browser Agent SDK",
+  "version": "0.0.1",
+  "description": "MVP browser agent that extracts product data from ChoTot product pages and exposes it to a local Java backend.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chotot.com/*",
+    "https://*.chotot.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chotot.com/*",
+        "https://*.chotot.com/*"
+      ],
+      "js": [
+        "contentScript.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "selectors.properties",
+        "agent.js",
+        "chototParser.js",
+        "utils.js"
+      ],
+      "matches": [
+        "https://chotot.com/*",
+        "https://*.chotot.com/*"
+      ]
+    }
+  ]
+}
+
