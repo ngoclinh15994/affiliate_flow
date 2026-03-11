@@ -3,7 +3,6 @@
 FROM jelastic/maven:3.9.5-openjdk-21 AS build
 WORKDIR /app
 COPY src /app/src
-COPY lib /app/lib
 COPY pom.xml /app
 RUN mvn clean package -DskipTests
 
