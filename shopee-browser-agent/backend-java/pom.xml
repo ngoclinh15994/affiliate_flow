@@ -4,12 +4,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.agent</groupId>
-    <artifactId>shopee-browser-agent-backend</artifactId>
+    <artifactId>chotot-browser-agent-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Shopee Browser Agent Backend</name>
-    <description>MVP backend for Shopee Browser Agent SDK</description>
+    <name>ChoTot Browser Agent Backend</name>
+    <description>MVP backend for ChoTot Browser Agent SDK</description>
 
     <properties>
         <java.version>17</java.version>
