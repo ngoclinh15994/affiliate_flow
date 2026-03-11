@@ -4,6 +4,7 @@ FROM jelastic/maven:3.9.5-openjdk-21 AS build
 WORKDIR /app
 COPY src /app/src
 COPY pom.xml /app
+COPY application.properties /app
 RUN mvn clean package -DskipTests
 
 # Start a new stage from scratch
