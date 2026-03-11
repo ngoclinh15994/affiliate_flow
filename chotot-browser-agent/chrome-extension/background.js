@@ -5,10 +5,11 @@
 
 import { log } from './utils.js';
 
-const WS_URL = 'ws://localhost:8080/ws/agent';
+const WS_URL = 'ws://localhost:8095/ws/agent';
 
 let socket = null;
 let reconnectTimeoutId = null;
+let healthCheckIntervalId = null;
 
 function connectWebSocket() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -24,6 +25,19 @@ function connectWebSocket() {
       clearTimeout(reconnectTimeoutId);
       reconnectTimeoutId = null;
     }
+
+    if (healthCheckIntervalId) {
+      clearInterval(healthCheckIntervalId);
+      healthCheckIntervalId = null;
+    }
+
+    // Periodic health check every 30 seconds
+    healthCheckIntervalId = setInterval(() => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        log('WebSocket health check failed, reconnecting');
+        connectWebSocket();
+      }
+    }, 30000);
   };
 
   socket.onclose = () => {
@@ -88,16 +102,21 @@ function waitForTabComplete(tabId, timeoutMs = 15000) {
 }
 
 async function handleRequestSnapshot(requestId, url) {
+  let createdTabId = null;
+
   try {
     let tab;
 
     if (url && typeof url === 'string' && url.startsWith('http')) {
       // Open the requested URL in a new tab and wait for it to finish loading.
       tab = await new Promise((resolve) => {
-        chrome.tabs.create({ url }, resolve);
+        chrome.tabs.create({ url }, (newTab) => {
+          createdTabId = newTab.id;
+          resolve(newTab);
+        });
       });
       tab = await waitForTabComplete(tab.id);
-  } else {
+    } else {
       // Fallback: use the currently active tab.
       [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     }
@@ -115,16 +134,35 @@ async function handleRequestSnapshot(requestId, url) {
         if (chrome.runtime.lastError) {
           log('Error sending message to content script', chrome.runtime.lastError);
           sendSnapshotToBackend(requestId, null);
-          return;
+        } else {
+          const product = response && response.product ? response.product : null;
+          sendSnapshotToBackend(requestId, product);
         }
 
-        const product = response && response.product ? response.product : null;
-        sendSnapshotToBackend(requestId, product);
+        if (createdTabId) {
+          setTimeout(() => {
+            chrome.tabs.remove(createdTabId, () => {
+              if (chrome.runtime.lastError) {
+                log('Failed to close snapshot tab', chrome.runtime.lastError);
+              }
+            });
+          }, 1000);
+        }
       }
     );
   } catch (e) {
     log('Error handling REQUEST_SNAPSHOT', e);
     sendSnapshotToBackend(requestId, null);
+
+    if (createdTabId) {
+      setTimeout(() => {
+        chrome.tabs.remove(createdTabId, () => {
+          if (chrome.runtime.lastError) {
+            log('Failed to close snapshot tab after error', chrome.runtime.lastError);
+          }
+        });
+      }, 1000);
+    }
   }
 }
 
@@ -133,9 +171,14 @@ async function handleRequestLatestProducts(requestId, url) {
     ? url
     : 'https://www.chotot.com/mua-ban-do-dien-tu?f=p&sp=0&page=1';
 
+  let createdTabId = null;
+
   try {
     let tab = await new Promise((resolve) => {
-      chrome.tabs.create({ url: targetUrl }, resolve);
+      chrome.tabs.create({ url: targetUrl }, (newTab) => {
+        createdTabId = newTab.id;
+        resolve(newTab);
+      });
     });
     tab = await waitForTabComplete(tab.id);
 
@@ -152,16 +195,35 @@ async function handleRequestLatestProducts(requestId, url) {
         if (chrome.runtime.lastError) {
           log('Error sending GET_LATEST_PRODUCTS to content script', chrome.runtime.lastError);
           sendLatestProductsToBackend(requestId, []);
-          return;
+        } else {
+          const products = response && Array.isArray(response.products) ? response.products : [];
+          sendLatestProductsToBackend(requestId, products);
         }
 
-        const products = response && Array.isArray(response.products) ? response.products : [];
-        sendLatestProductsToBackend(requestId, products);
+        if (createdTabId) {
+          setTimeout(() => {
+            chrome.tabs.remove(createdTabId, () => {
+              if (chrome.runtime.lastError) {
+                log('Failed to close latest products tab', chrome.runtime.lastError);
+              }
+            });
+          }, 1000);
+        }
       }
     );
   } catch (e) {
     log('Error handling REQUEST_LATEST_PRODUCTS', e);
     sendLatestProductsToBackend(requestId, []);
+
+    if (createdTabId) {
+      setTimeout(() => {
+        chrome.tabs.remove(createdTabId, () => {
+          if (chrome.runtime.lastError) {
+            log('Failed to close latest products tab after error', chrome.runtime.lastError);
+          }
+        });
+      }, 1000);
+    }
   }
 }
 
