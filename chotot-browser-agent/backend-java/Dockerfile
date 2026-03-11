@@ -10,5 +10,5 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jdk-jammy
 WORKDIR /app
 COPY --from=build /app/target/chotot-browser-agent-backend-0.0.1-SNAPSHOT.jar /app/chotot-browser-agent-backend-0.0.1-SNAPSHOT.jar
-EXPOSE 8080
+EXPOSE 8095
 ENTRYPOINT ["java","-jar","/app/chotot-browser-agent-backend-0.0.1-SNAPSHOT.jar"]
