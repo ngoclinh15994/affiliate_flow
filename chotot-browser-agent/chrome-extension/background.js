@@ -146,7 +146,7 @@ async function handleRequestSnapshot(requestId, url) {
                 log('Failed to close snapshot tab', chrome.runtime.lastError);
               }
             });
-          }, 1000);
+          }, 10000);
         }
       }
     );
@@ -161,7 +161,7 @@ async function handleRequestSnapshot(requestId, url) {
             log('Failed to close snapshot tab after error', chrome.runtime.lastError);
           }
         });
-      }, 1000);
+      }, 10000);
     }
   }
 }
@@ -207,7 +207,7 @@ async function handleRequestLatestProducts(requestId, url) {
                 log('Failed to close latest products tab', chrome.runtime.lastError);
               }
             });
-          }, 1000);
+          }, 10000);
         }
       }
     );
@@ -222,7 +222,7 @@ async function handleRequestLatestProducts(requestId, url) {
             log('Failed to close latest products tab after error', chrome.runtime.lastError);
           }
         });
-      }, 1000);
+      }, 10000);
     }
   }
 }
@@ -280,4 +280,19 @@ function sendLatestProductsToBackend(requestId, products) {
 
 // Immediately attempt to connect when the service worker starts.
 connectWebSocket();
+
+// Also ensure we reconnect on extension lifecycle events
+if (chrome.runtime && chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    log('onStartup event, ensuring WebSocket connection');
+    connectWebSocket();
+  });
+}
+
+if (chrome.runtime && chrome.runtime.onInstalled) {
+  chrome.runtime.onInstalled.addListener(() => {
+    log('onInstalled event, ensuring WebSocket connection');
+    connectWebSocket();
+  });
+}
 
