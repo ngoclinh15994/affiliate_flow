@@ -5,7 +5,6 @@ import com.agent.model.ListingItem;
 import com.agent.service.AgentRequestService;
 import com.agent.service.AgentRequestService.PendingRequest;
 import com.agent.service.AgentRequestService.PendingLatestProductsRequest;
-import com.agent.websocket.AgentWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -22,14 +21,12 @@ import java.time.Duration;
 public class ProductController {
 
     private static final Logger log = LoggerFactory.getLogger(ProductController.class);
+    public static final int WAIT_TIMEOUT = 20;
 
     private final AgentRequestService agentRequestService;
-    private final AgentWebSocketHandler agentWebSocketHandler;
 
-    public ProductController(AgentRequestService agentRequestService,
-                             AgentWebSocketHandler agentWebSocketHandler) {
+    public ProductController(AgentRequestService agentRequestService) {
         this.agentRequestService = agentRequestService;
-        this.agentWebSocketHandler = agentWebSocketHandler;
     }
 
     /**
@@ -40,18 +37,10 @@ public class ProductController {
     @GetMapping("/product-snapshot")
     public ResponseEntity<?> getProductSnapshot(
             @RequestParam(name = "url", required = false) String url) {
-        PendingRequest pending = agentRequestService.createPendingRequest();
+        PendingRequest pending = agentRequestService.createSnapshotJob(url);
 
         try {
-            agentWebSocketHandler.sendRequestSnapshot(pending.requestId(), url);
-        } catch (IllegalStateException e) {
-            log.warn("Failed to send REQUEST_SNAPSHOT: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("Chrome extension is not connected via WebSocket.");
-        }
-
-        try {
-            ProductSnapshot snapshot = agentRequestService.awaitSnapshot(pending, Duration.ofSeconds(10));
+            ProductSnapshot snapshot = agentRequestService.awaitSnapshot(pending, Duration.ofSeconds(WAIT_TIMEOUT));
             return ResponseEntity.ok(snapshot);
         } catch (Exception e) {
             log.error("Error while waiting for product snapshot", e);
@@ -67,18 +56,10 @@ public class ProductController {
      */
     @GetMapping("/latest-products")
     public ResponseEntity<?> getLatestProducts() {
-        PendingLatestProductsRequest pending = agentRequestService.createPendingLatestProductsRequest();
+        PendingLatestProductsRequest pending = agentRequestService.createLatestProductsJob();
 
         try {
-            agentWebSocketHandler.sendRequestLatestProducts(pending.requestId());
-        } catch (IllegalStateException e) {
-            log.warn("Failed to send REQUEST_LATEST_PRODUCTS: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("Chrome extension is not connected via WebSocket.");
-        }
-
-        try {
-            java.util.List<ListingItem> items = agentRequestService.awaitLatestProducts(pending, Duration.ofSeconds(10));
+            java.util.List<ListingItem> items = agentRequestService.awaitLatestProducts(pending, Duration.ofSeconds(WAIT_TIMEOUT));
             return ResponseEntity.ok(items);
         } catch (Exception e) {
             log.error("Error while waiting for latest products", e);

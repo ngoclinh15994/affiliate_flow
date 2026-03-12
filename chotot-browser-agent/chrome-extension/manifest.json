@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "https://chotot.com/*",
-    "https://*.chotot.com/*"
+    "https://*.chotot.com/*",
+    "http://localhost:8095/*"
   ],
   "background": {
     "service_worker": "background.js",

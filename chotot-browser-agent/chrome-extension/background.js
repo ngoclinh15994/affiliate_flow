@@ -5,76 +5,64 @@
 
 import { log } from './utils.js';
 
-const WS_URL = 'ws://localhost:8095/ws/agent';
+const BACKEND_BASE_URL = 'http://localhost:8095';
 
-let socket = null;
-let reconnectTimeoutId = null;
-let healthCheckIntervalId = null;
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-function connectWebSocket() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return;
-  }
+async function pollLoop() {
+  const idleDelayMs = 5000;
+  const errorDelayMs = 5000;
 
-  log('Connecting WebSocket to backend at', WS_URL);
-  socket = new WebSocket(WS_URL);
+  while (true) {
+    try {
+      const res = await fetch(`${BACKEND_BASE_URL}/api/agent/poll`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ agentId: 'chrome-extension' })
+      });
 
-  socket.onopen = () => {
-    log('WebSocket connected to backend');
-    if (reconnectTimeoutId) {
-      clearTimeout(reconnectTimeoutId);
-      reconnectTimeoutId = null;
-    }
-
-    if (healthCheckIntervalId) {
-      clearInterval(healthCheckIntervalId);
-      healthCheckIntervalId = null;
-    }
-
-    // Periodic health check every 30 seconds
-    healthCheckIntervalId = setInterval(() => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        log('WebSocket health check failed, reconnecting');
-        connectWebSocket();
+      if (res.status === 204) {
+        await sleep(idleDelayMs);
+        continue;
       }
-    }, 30000);
-  };
 
-  socket.onclose = () => {
-    log('WebSocket closed, scheduling reconnect');
-    scheduleReconnect();
-  };
+      if (!res.ok) {
+        log('Poll error status', res.status);
+        await sleep(errorDelayMs);
+        continue;
+      }
 
-  socket.onerror = (err) => {
-    log('WebSocket error', err);
-  };
-
-  socket.onmessage = (event) => {
-    handleBackendMessage(event.data);
-  };
+      const job = await res.json();
+      await handleJob(job);
+      // Immediately continue loop to look for further jobs
+    } catch (e) {
+      log('Poll loop error', e);
+      await sleep(errorDelayMs);
+    }
+  }
 }
 
-function scheduleReconnect() {
-  if (reconnectTimeoutId) return;
-  reconnectTimeoutId = setTimeout(() => {
-    reconnectTimeoutId = null;
-    connectWebSocket();
-  }, 3000);
-}
-
-async function handleBackendMessage(raw) {
-  let msg;
-  try {
-    msg = JSON.parse(raw);
-  } catch (e) {
-    log('Failed to parse backend message', e);
+async function handleJob(job) {
+  if (!job || !job.type || !job.jobId) {
     return;
   }
 
-  if (msg.type === 'REQUEST_SNAPSHOT') {
-    await handleRequestSnapshot(msg.requestId, msg.url);
-  } else if (msg.type === 'REQUEST_LATEST_PRODUCTS') {
-    await handleRequestLatestProducts(msg.requestId, msg.url);
+  const type = job.type;
+  const jobId = job.jobId;
+  const url = job.url || null;
+
+  if (type === 'SNAPSHOT') {
+    const product = await performSnapshot(url);
+    await sendJobResult(jobId, type, product);
+  } else if (type === 'LATEST_PRODUCTS') {
+    const products = await performLatestProducts(url);
+    await sendJobResult(jobId, type, products);
+  } else {
+    log('Unknown job type', type);
   }
 }
 
@@ -101,7 +89,7 @@ function waitForTabComplete(tabId, timeoutMs = 15000) {
   });
 }
 
-async function handleRequestSnapshot(requestId, url) {
+async function performSnapshot(url) {
   let createdTabId = null;
 
   try {
@@ -123,36 +111,37 @@ async function handleRequestSnapshot(requestId, url) {
 
     if (!tab || !tab.id || !tab.url || !tab.url.includes('chotot.com')) {
       log('No active ChoTot tab found for snapshot request');
-      sendSnapshotToBackend(requestId, null);
-      return;
+      return null;
     }
 
-    chrome.tabs.sendMessage(
-      tab.id,
-      { type: 'GET_PRODUCT_SNAPSHOT', requestId },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          log('Error sending message to content script', chrome.runtime.lastError);
-          sendSnapshotToBackend(requestId, null);
-        } else {
-          const product = response && response.product ? response.product : null;
-          sendSnapshotToBackend(requestId, product);
-        }
+    const product = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(
+        tab.id,
+        { type: 'GET_PRODUCT_SNAPSHOT' },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            log('Error sending message to content script', chrome.runtime.lastError);
+            resolve(null);
+          } else {
+            resolve(response && response.product ? response.product : null);
+          }
 
-        if (createdTabId) {
-          setTimeout(() => {
-            chrome.tabs.remove(createdTabId, () => {
-              if (chrome.runtime.lastError) {
-                log('Failed to close snapshot tab', chrome.runtime.lastError);
-              }
-            });
-          }, 10000);
+          if (createdTabId) {
+            setTimeout(() => {
+              chrome.tabs.remove(createdTabId, () => {
+                if (chrome.runtime.lastError) {
+                  log('Failed to close snapshot tab', chrome.runtime.lastError);
+                }
+              });
+            }, 10000);
+          }
         }
-      }
-    );
+      );
+    });
+
+    return product;
   } catch (e) {
-    log('Error handling REQUEST_SNAPSHOT', e);
-    sendSnapshotToBackend(requestId, null);
+    log('Error in performSnapshot()', e);
 
     if (createdTabId) {
       setTimeout(() => {
@@ -163,10 +152,12 @@ async function handleRequestSnapshot(requestId, url) {
         });
       }, 10000);
     }
+
+    return null;
   }
 }
 
-async function handleRequestLatestProducts(requestId, url) {
+async function performLatestProducts(url) {
   const targetUrl = typeof url === 'string' && url.startsWith('http')
     ? url
     : 'https://www.chotot.com/mua-ban-do-dien-tu?f=p&sp=0&page=1';
@@ -184,36 +175,38 @@ async function handleRequestLatestProducts(requestId, url) {
 
     if (!tab || !tab.id || !tab.url || !tab.url.includes('chotot.com')) {
       log('No active ChoTot tab found for latest products request');
-      sendLatestProductsToBackend(requestId, []);
-      return;
+      log('No active ChoTot tab found for latest products request');
+      return [];
     }
 
-    chrome.tabs.sendMessage(
-      tab.id,
-      { type: 'GET_LATEST_PRODUCTS', requestId },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          log('Error sending GET_LATEST_PRODUCTS to content script', chrome.runtime.lastError);
-          sendLatestProductsToBackend(requestId, []);
-        } else {
-          const products = response && Array.isArray(response.products) ? response.products : [];
-          sendLatestProductsToBackend(requestId, products);
-        }
+    const products = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(
+        tab.id,
+        { type: 'GET_LATEST_PRODUCTS' },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            log('Error sending GET_LATEST_PRODUCTS to content script', chrome.runtime.lastError);
+            resolve([]);
+          } else {
+            resolve(response && Array.isArray(response.products) ? response.products : []);
+          }
 
-        if (createdTabId) {
-          setTimeout(() => {
-            chrome.tabs.remove(createdTabId, () => {
-              if (chrome.runtime.lastError) {
-                log('Failed to close latest products tab', chrome.runtime.lastError);
-              }
-            });
-          }, 10000);
+          if (createdTabId) {
+            setTimeout(() => {
+              chrome.tabs.remove(createdTabId, () => {
+                if (chrome.runtime.lastError) {
+                  log('Failed to close latest products tab', chrome.runtime.lastError);
+                }
+              });
+            }, 10000);
+          }
         }
-      }
-    );
+      );
+    });
+
+    return products;
   } catch (e) {
-    log('Error handling REQUEST_LATEST_PRODUCTS', e);
-    sendLatestProductsToBackend(requestId, []);
+    log('Error in performLatestProducts()', e);
 
     if (createdTabId) {
       setTimeout(() => {
@@ -224,75 +217,29 @@ async function handleRequestLatestProducts(requestId, url) {
         });
       }, 10000);
     }
+
+    return [];
   }
 }
 
-function sendSnapshotToBackend(requestId, product) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    log('Cannot send snapshot, WebSocket is not open');
-    return;
-  }
-
-  const safeProduct = product || {
-    title: null,
-    price: null,
-    rating: null,
-    sold: null,
-    shop: null,
-    images: []
-  };
-
-  const message = {
-    type: 'PRODUCT_SNAPSHOT',
-    requestId,
-    payload: safeProduct
-  };
-
+async function sendJobResult(jobId, type, payload) {
   try {
-    socket.send(JSON.stringify(message));
-    log('Sent PRODUCT_SNAPSHOT for requestId', requestId);
+    await fetch(`${BACKEND_BASE_URL}/api/agent/result`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        jobId,
+        type,
+        payload
+      })
+    });
   } catch (e) {
-    log('Failed to send PRODUCT_SNAPSHOT', e);
+    log('Failed to send job result', e);
   }
 }
 
-function sendLatestProductsToBackend(requestId, products) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    log('Cannot send latest products, WebSocket is not open');
-    return;
-  }
-
-  const safeProducts = Array.isArray(products) ? products : [];
-
-  const message = {
-    type: 'LATEST_PRODUCTS',
-    requestId,
-    payload: safeProducts
-  };
-
-  try {
-    socket.send(JSON.stringify(message));
-    log('Sent LATEST_PRODUCTS for requestId', requestId);
-  } catch (e) {
-    log('Failed to send LATEST_PRODUCTS', e);
-  }
-}
-
-// Immediately attempt to connect when the service worker starts.
-connectWebSocket();
-
-// Also ensure we reconnect on extension lifecycle events
-if (chrome.runtime && chrome.runtime.onStartup) {
-  chrome.runtime.onStartup.addListener(() => {
-    log('onStartup event, ensuring WebSocket connection');
-    connectWebSocket();
-  });
-}
-
-if (chrome.runtime && chrome.runtime.onInstalled) {
-  chrome.runtime.onInstalled.addListener(() => {
-    log('onInstalled event, ensuring WebSocket connection');
-    connectWebSocket();
-  });
-}
+// Start the HTTP polling loop when the service worker starts.
+pollLoop();
 

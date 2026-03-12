@@ -7,7 +7,6 @@ ChoTot Browser Agent SDK (MVP)
 
 - **Chrome Extension (Manifest V3)** running in a real browser.
 - **Java Spring Boot backend** exposing a simple REST API.
-- **Local WebSocket** between backend and extension for on-demand product snapshots.
 
 Communication flow:
 
@@ -31,9 +30,6 @@ shopee-browser-agent/
 │       │   └── ProductController.java
 │       ├── service/
 │       │   └── AgentRequestService.java
-│       ├── websocket/
-│       │   ├── WebSocketConfig.java
-│       │   └── AgentWebSocketHandler.java
 │       └── model/
 │           └── ProductSnapshot.java
 │
