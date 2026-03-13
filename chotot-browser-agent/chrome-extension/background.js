@@ -7,42 +7,30 @@ import { log } from './utils.js';
 
 const BACKEND_BASE_URL = 'http://localhost:8095';
 
-async function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+async function pollOnce() {
+  try {
+    const res = await fetch(`${BACKEND_BASE_URL}/api/agent/poll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ agentId: 'chrome-extension' })
+    });
 
-async function pollLoop() {
-  const idleDelayMs = 5000;
-  const errorDelayMs = 5000;
-
-  while (true) {
-    try {
-      const res = await fetch(`${BACKEND_BASE_URL}/api/agent/poll`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ agentId: 'chrome-extension' })
-      });
-
-      if (res.status === 204) {
-        await sleep(idleDelayMs);
-        continue;
-      }
-
-      if (!res.ok) {
-        log('Poll error status', res.status);
-        await sleep(errorDelayMs);
-        continue;
-      }
-
-      const job = await res.json();
-      await handleJob(job);
-      // Immediately continue loop to look for further jobs
-    } catch (e) {
-      log('Poll loop error', e);
-      await sleep(errorDelayMs);
+    if (res.status === 204) {
+      // No job available
+      return;
     }
+
+    if (!res.ok) {
+      log('Poll error status', res.status);
+      return;
+    }
+
+    const job = await res.json();
+    await handleJob(job);
+  } catch (e) {
+    log('Poll error', e);
   }
 }
 
@@ -240,6 +228,27 @@ async function sendJobResult(jobId, type, payload) {
   }
 }
 
-// Start the HTTP polling loop when the service worker starts.
-pollLoop();
+// Set up alarms to periodically poll the backend.
+const AGENT_POLL_ALARM = 'AGENT_POLL_ALARM';
+const POLL_PERIOD_MINUTES = 0.1; // ~6 seconds
+
+function createPollAlarm() {
+  chrome.alarms.create(AGENT_POLL_ALARM, { periodInMinutes: POLL_PERIOD_MINUTES });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  log('Service worker installed at', new Date().toISOString());
+  createPollAlarm();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  log('Service worker startup at', new Date().toISOString());
+  createPollAlarm();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === AGENT_POLL_ALARM) {
+    pollOnce();
+  }
+});
 
