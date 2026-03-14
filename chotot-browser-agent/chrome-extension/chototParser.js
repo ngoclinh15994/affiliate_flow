@@ -5,6 +5,30 @@ import { parseProperties, safeText, safeAttr, log } from './utils.js';
 
 let selectorsPromise = null;
 
+async function loadDynamicSelectors() {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+      return {};
+    }
+    return await new Promise((resolve) => {
+      chrome.storage.local.get(['dynamicSelectors'], (result) => {
+        if (chrome.runtime && chrome.runtime.lastError) {
+          resolve({});
+          return;
+        }
+        const dynamic = result && result.dynamicSelectors;
+        if (dynamic && typeof dynamic === 'object') {
+          resolve(dynamic);
+        } else {
+          resolve({});
+        }
+      });
+    });
+  } catch {
+    return {};
+  }
+}
+
 async function loadSelectors() {
   if (!selectorsPromise) {
     selectorsPromise = (async () => {
@@ -17,8 +41,12 @@ async function loadSelectors() {
         }
         const text = await resp.text();
         const props = parseProperties(text);
-        log('Loaded selectors.properties', props);
-        return props;
+
+        const dynamic = await loadDynamicSelectors();
+        const merged = { ...props, ...dynamic };
+
+        log('Loaded selectors', merged);
+        return merged;
       } catch (e) {
         log('Error loading selectors.properties', e);
         return {};

@@ -1,12 +1,15 @@
 // High-level agent interface for interacting with the ChoTot page DOM.
 // Provides the core MVP functions:
 //  - getProductSnapshot()
+//  - getLatestProducts()
 //  - scrollPage()
 //  - getPageUrl()
+//  - runProductSelectorDiscovery()
 
 import { extractProduct } from './chototParser.js';
 import { extractLatestProducts } from './chototParser.js';
 import { log } from './utils.js';
+import { discoverProductSelectors } from './selectorDiscovery.js';
 
 export async function getProductSnapshot() {
   try {
@@ -56,6 +59,16 @@ export function getPageUrl() {
   } catch (e) {
     log('Error in getPageUrl()', e);
     return null;
+  }
+}
+
+export async function runProductSelectorDiscovery(expectedSelectors) {
+  try {
+    const selectors = await discoverProductSelectors(expectedSelectors);
+    return selectors;
+  } catch (e) {
+    log('Error in runProductSelectorDiscovery()', e);
+    return {};
   }
 }
 

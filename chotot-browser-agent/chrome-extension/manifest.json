@@ -7,7 +7,8 @@
     "tabs",
     "scripting",
     "activeTab",
-    "alarms"
+    "alarms",
+    "storage"
   ],
   "host_permissions": [
     "https://chotot.com/*",
@@ -17,6 +18,10 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"
+  },
+  "action": {
+    "default_title": "ChoTot Browser Agent",
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {
@@ -36,7 +41,9 @@
         "selectors.properties",
         "agent.js",
         "chototParser.js",
-        "utils.js"
+        "utils.js",
+        "selectorDiscovery.js",
+        "selectorDiscoveryConfig.js"
       ],
       "matches": [
         "https://chotot.com/*",

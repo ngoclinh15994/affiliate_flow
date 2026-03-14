@@ -24,6 +24,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message.type === 'GET_PAGE_URL') {
       const url = agent.getPageUrl();
       sendResponse({ url });
+    } else if (message.type === 'RUN_PRODUCT_SELECTOR_DISCOVERY') {
+      const selectors = await agent.runProductSelectorDiscovery(message.expectedSelectors);
+      sendResponse({ selectors });
     }
   })();
 
