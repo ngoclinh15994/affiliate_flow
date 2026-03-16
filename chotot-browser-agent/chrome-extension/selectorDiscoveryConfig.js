@@ -13,7 +13,18 @@ export const SAMPLE_PRODUCT_EXPECTED = {
   'product.shop': 'Nguyễn Ngọc Linh',
   'product.rating': 'đánh giá',
   'product.sold': 'Đã bán',
-  'product.description': 'RAM HyperX Fury DDR4 8GB, hiệu năng ổn định, phù hợp cho máy tính chơi game hoặc làm việc',
-  'product.owner.phone': '034854',
+  'product.description':
+    'RAM HyperX Fury DDR4 8GB, hiệu năng ổn định, phù hợp cho máy tính chơi game hoặc làm việc',
+  'product.owner.phone': '034854'
 };
+
+export const PRODUCT_FIELD_KEYS = [
+  'product.title',
+  'product.price',
+  'product.rating',
+  'product.sold',
+  'product.shop',
+  'product.description',
+  'product.owner.phone'
+];
 

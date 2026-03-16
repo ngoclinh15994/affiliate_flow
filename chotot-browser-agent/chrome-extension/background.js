@@ -4,7 +4,7 @@
 // - Forwards commands to the active Shopee tab and returns PRODUCT_SNAPSHOT results.
 
 import { log } from './utils.js';
-import { SAMPLE_PRODUCT_URL, SAMPLE_PRODUCT_EXPECTED } from './selectorDiscoveryConfig.js';
+import { SAMPLE_PRODUCT_URL, SAMPLE_PRODUCT_EXPECTED, PRODUCT_FIELD_KEYS } from './selectorDiscoveryConfig.js';
 
 const BACKEND_BASE_URL = 'http://localhost:8095';
 
@@ -339,13 +339,78 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'RUN_PRODUCT_SELECTOR_DISCOVERY_NOW') {
+  if (!message || !message.type) {
+    return undefined;
+  }
+
+  if (message.type === 'RUN_PRODUCT_SELECTOR_DISCOVERY_NOW') {
     (async () => {
       await runDailySelectorDiscovery();
-      sendResponse({ ok: true });
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['dynamicSelectors'], (result) => {
+          if (chrome.runtime.lastError) {
+            sendResponse({ ok: true });
+          } else {
+            sendResponse({
+              ok: true,
+              fieldKeys: PRODUCT_FIELD_KEYS,
+              dynamicSelectors: result.dynamicSelectors || {}
+            });
+          }
+        });
+      } else {
+        sendResponse({ ok: true });
+      }
     })();
     return true;
+  } else if (message.type === 'GET_CURRENT_SELECTORS') {
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['dynamicSelectors'], (result) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ fieldKeys: PRODUCT_FIELD_KEYS, dynamicSelectors: {} });
+        } else {
+          sendResponse({
+            fieldKeys: PRODUCT_FIELD_KEYS,
+            dynamicSelectors: result.dynamicSelectors || {}
+          });
+        }
+      });
+      return true;
+    }
+    sendResponse({ fieldKeys: PRODUCT_FIELD_KEYS, dynamicSelectors: {} });
+    return false;
+  } else if (message.type === 'RESELECT_RESULT') {
+    const { fieldKey, selector } = message;
+    if (!fieldKey || typeof selector !== 'string' || !selector.trim()) {
+      sendResponse({ ok: false });
+      return false;
+    }
+    if (!PRODUCT_FIELD_KEYS.includes(fieldKey)) {
+      sendResponse({ ok: false });
+      return false;
+    }
+
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['dynamicSelectors'], (result) => {
+        const current = (result && result.dynamicSelectors) || {};
+        const next = { ...current, [fieldKey]: selector };
+        chrome.storage.local.set({ dynamicSelectors: next }, () => {
+          if (chrome.runtime.lastError) {
+            log('Failed to save dynamicSelectors from reselect', chrome.runtime.lastError);
+            sendResponse({ ok: false });
+          } else {
+            log('Updated selector via reselect', fieldKey, selector);
+            sendResponse({ ok: true });
+          }
+        });
+      });
+      return true;
+    }
+
+    sendResponse({ ok: false });
+    return false;
   }
+
   return undefined;
 });
 
