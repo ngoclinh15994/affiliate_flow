@@ -71,6 +71,13 @@ public class AgentJobController {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> map = (Map<String, Object>) payload;
                 ProductSnapshot snapshot = new ProductSnapshot();
+                snapshot.setStatus((String) map.get("status"));
+                Object deleted = map.get("deleted");
+                if (deleted instanceof Boolean) {
+                    snapshot.setDeleted((Boolean) deleted);
+                } else if (deleted instanceof String) {
+                    snapshot.setDeleted(Boolean.parseBoolean((String) deleted));
+                }
                 snapshot.setTitle((String) map.get("title"));
                 snapshot.setPrice((String) map.get("price"));
                 snapshot.setRating((String) map.get("rating"));

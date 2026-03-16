@@ -23,6 +23,8 @@ export async function getProductSnapshot() {
       price: null,
       rating: null,
       sold: null,
+      status: 'ERROR',
+      deleted: false,
       shop: null,
       description: null,
       phoneNumber: null,
@@ -75,6 +77,8 @@ export async function runProductSelectorDiscovery(expectedSelectors) {
 function normalizeProduct(product) {
   const safe = product || {};
   return {
+    status: safe.status ?? null,
+    deleted: safe.deleted ?? false,
     title: safe.title ?? null,
     price: safe.price ?? null,
     rating: safe.rating ?? null,

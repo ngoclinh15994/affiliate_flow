@@ -61,6 +61,28 @@ async function loadSelectors() {
  * All fields are nullable; missing selectors or elements simply yield null.
  */
 export async function extractProduct() {
+  const bodyText = typeof document !== 'undefined' && document.body
+    ? (document.body.innerText || document.body.textContent || '')
+    : '';
+  const deletedPhrase = 'tin đăng không còn tồn tại';
+  const isDeleted = bodyText.toLowerCase().includes(deletedPhrase);
+
+  if (isDeleted) {
+    return {
+      status: 'DELETED',
+      deleted: true,
+      title: null,
+      price: null,
+      rating: null,
+      sold: null,
+      shop: null,
+      shopUrl: null,
+      description: null,
+      phoneNumber: null,
+      images: []
+    };
+  }
+
   const selectors = await loadSelectors();
 
   const titleSelector = selectors['product.title'];
