@@ -13,6 +13,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductSnapshot {
 
+    private String productId;
     private String status;
     private Boolean deleted;
     private String title;
@@ -26,6 +27,14 @@ public class ProductSnapshot {
     private List<String> images = new ArrayList<>();
 
     public ProductSnapshot() {
+    }
+
+    public String getProductId() {
+        return productId;
+    }
+
+    public void setProductId(String productId) {
+        this.productId = productId;
     }
 
     public String getStatus() {

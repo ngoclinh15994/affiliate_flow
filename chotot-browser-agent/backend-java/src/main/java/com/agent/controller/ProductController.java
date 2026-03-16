@@ -36,11 +36,15 @@ public class ProductController {
      */
     @GetMapping("/product-snapshot")
     public ResponseEntity<?> getProductSnapshot(
-            @RequestParam(name = "url", required = false) String url) {
+            @RequestParam(name = "url", required = false) String url,
+            @RequestParam(name = "id", required = false) String productId) {
         PendingRequest pending = agentRequestService.createSnapshotJob(url);
 
         try {
             ProductSnapshot snapshot = agentRequestService.awaitSnapshot(pending, Duration.ofSeconds(WAIT_TIMEOUT));
+            if (productId != null && !productId.isBlank()) {
+                snapshot.setProductId(productId);
+            }
             return ResponseEntity.ok(snapshot);
         } catch (Exception e) {
             log.error("Error while waiting for product snapshot", e);
